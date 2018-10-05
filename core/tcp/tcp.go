@@ -52,6 +52,7 @@ func (t *TCP) Start() {
 
 // Stop stop serve
 func (t *TCP) Stop() {
+	log.Printf("TCP.Stop %v, backends: %v\n", t.config.Local, t.config.Servers)
 	lic, ok := t.listener.(*net.TCPListener)
 	if ok {
 		lic.Close()

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/safeie/goproxy/core/scheduler"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	Debug     bool
 	Scheduler string
 	Protocol  string
+	Timeout   time.Duration // time.Millisecond
 	Local     string
 	Servers   []string
 }
@@ -20,6 +22,7 @@ type Config struct {
 func New(protocol string, local string, server string) (*Config, error) {
 	t := new(Config)
 	t.Scheduler = scheduler.IPHashName
+	t.Timeout = 2000
 	if protocol == "" {
 		protocol = "tcp"
 	}

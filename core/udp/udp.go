@@ -55,7 +55,6 @@ func (t *UDP) Start() {
 		log.Printf("UDP.Start error: %v\n", err)
 		return
 	}
-	defer t.Stop()
 	log.Printf("UDP.Start %v, backends: %v\n", t.config.Local, t.config.Servers)
 
 	go t.handleServer()
@@ -87,6 +86,7 @@ func (t *UDP) Start() {
 
 // Stop stop serve
 func (t *UDP) Stop() {
+	log.Printf("UDP.Stop %v, backends: %v\n", t.config.Local, t.config.Servers)
 	close(t.channelServer)
 	close(t.channelClient)
 	t.listener.Close()
@@ -94,24 +94,39 @@ func (t *UDP) Stop() {
 
 func (t *UDP) handleServer() {
 	for msg := range t.channelServer {
+		var err error
 		var dconn *net.UDPConn
 		c, ok := t.connStore.Load(msg.Addr.String())
-		if !ok {
-			serAddr := scheduler.Get(t.config.Scheduler).Schedule(msg.Addr.String(), t.config.Servers)
-			udpAddr, err := net.ResolveUDPAddr("udp", serAddr)
-			dconn, err = net.DialUDP("udp", nil, udpAddr)
-			if err != nil {
-				log.Printf("UDP 连接服务器 [%v] 失败: %v\n", serAddr, err)
-				break
-			}
-			t.connStore.Store(msg.Addr.String(), &conn{Conn: dconn, Active: time.Now()})
-			log.Printf("UDP 服务端已连接: %v => %v\n", dconn.LocalAddr(), serAddr)
-		} else {
+		if ok {
 			dconn = c.(*conn).Conn
+			dconn.SetWriteDeadline(time.Now().Add(time.Millisecond * t.config.Timeout))
+			_, err = dconn.Write(msg.Data)
+			dconn.SetWriteDeadline(time.Time{})
+			if err != nil {
+				log.Printf("UDP 往 [%v] 发送数据失败: %v\n", dconn.RemoteAddr().String(), err)
+			} else {
+				t.connStore.Store(msg.Addr.String(), &conn{Conn: dconn, Active: time.Now()})
+				continue
+			}
 		}
 
-		dconn.Write(msg.Data)
-		t.connStore.Store(msg.Addr.String(), &conn{Conn: dconn, Active: time.Now()})
+		serAddr := scheduler.Get(t.config.Scheduler).Schedule(msg.Addr.String(), t.config.Servers)
+		udpAddr, err := net.ResolveUDPAddr("udp", serAddr)
+		dconn, err = net.DialUDP("udp", nil, udpAddr)
+		if err != nil {
+			log.Printf("UDP 连接服务器 [%v] 失败: %v\n", serAddr, err)
+			break
+		}
+		log.Printf("UDP 服务端已连接: %v => %v\n", dconn.LocalAddr(), serAddr)
+
+		dconn.SetWriteDeadline(time.Now().Add(time.Millisecond * t.config.Timeout))
+		_, err = dconn.Write(msg.Data)
+		dconn.SetWriteDeadline(time.Time{})
+		if err != nil {
+			log.Printf("UDP 往 [%v] 发送数据失败: %v\n", dconn.RemoteAddr().String(), err)
+		} else {
+			t.connStore.Store(msg.Addr.String(), &conn{Conn: dconn, Active: time.Now()})
+		}
 		go func(msg message) {
 			for {
 				data := make([]byte, 4096)

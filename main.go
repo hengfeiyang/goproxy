@@ -29,6 +29,7 @@ func main() {
 
 	config.Debug = true
 	config.Scheduler = scheduler.IPHashName
+	config.Timeout = 2000
 	proxy := core.New(config)
 	proxy.Start()
 }
